@@ -3,6 +3,7 @@ package com.example.taskoneweeklyseven
 import android.content.*
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
+import android.util.Log
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.taskoneweeklyseven.HeroInfoActivity.Companion.KEY_ID
 import com.example.taskoneweeklyseven.databinding.ActivityMainBinding
@@ -11,39 +12,22 @@ import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.Types
 import okhttp3.*
-import java.io.IOException
+import java.io.*
 
 open class MainActivity : AppCompatActivity(), HeroAdapter.Listener {
-    lateinit var json:String
+    private var json: String = ""
     lateinit var binding: ActivityMainBinding
     private val URL_HEROINFO = "https://api.opendota.com/api/heroStats"
     private val okHttpClient = OkHttpClient()
+    private val file: String = "dota"
+
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val projection =
-            arrayOf(MyContentProvider._ID, MyContentProvider.VALUE)
-        val rs = contentResolver.query(
-            MyContentProvider.CONTENT_URI,
-            projection, null, null, null
-        )
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        if (rs?.moveToNext() == true) {
-            val moshi = Moshi.Builder().build()
-            val listType = Types.newParameterizedType(List::class.java, HeroInfo::class.java)
-            val adapter: JsonAdapter<List<HeroInfo>> = moshi.adapter(listType)
-            heroInfo = adapter.fromJson(rs.getString(1))!!
-            initRcV()
-        }
-        else {
-            getHeroInfo()
-            while (heroInfo.isEmpty()) {
-                continue
-            }
-            insertContentProvider(json)
-            initRcV()
-        }
+        readJson()
+        initRcV()
     }
 
     private fun getHeroInfo() {
@@ -63,17 +47,54 @@ open class MainActivity : AppCompatActivity(), HeroAdapter.Listener {
         })
     }
 
-    private fun insertContentProvider(value: String){
-        val projection =
-            arrayOf(MyContentProvider._ID, MyContentProvider.VALUE)
-        val rs = contentResolver.query(
-            MyContentProvider.CONTENT_URI,
-            projection, null, null, null
-        )
-        val cv = ContentValues()
-        cv.put(MyContentProvider.VALUE, value)
-        contentResolver.insert(MyContentProvider.CONTENT_URI, cv)
-        rs?.requery()
+    private fun saveJson(){
+        try {
+            // отрываем поток для записи
+            val bw = BufferedWriter(
+                OutputStreamWriter(
+                    openFileOutput(file, MODE_PRIVATE)
+                )
+            )
+            // пишем данные
+            bw.write(json)
+            // закрываем поток
+            bw.close()
+            Log.d("MyLog", "Файл записан")
+        } catch (e: FileNotFoundException) {
+            e.printStackTrace()
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun readJson(){
+        try {
+            // открываем поток для чтения
+            val br = BufferedReader(
+                InputStreamReader(
+                    openFileInput(file)
+                )
+            )
+            var str = ""
+            str = br.readLine()
+            // читаем содержимое
+            if (str != null) {
+                val moshi = Moshi.Builder().build()
+                val listType = Types.newParameterizedType(List::class.java, HeroInfo::class.java)
+                val adapter: JsonAdapter<List<HeroInfo>> = moshi.adapter(listType)
+                heroInfo = adapter.fromJson(str)!!
+            } else {
+                getHeroInfo()
+                while (heroInfo.isEmpty()) {
+                    continue
+                }
+                saveJson()
+            }
+        } catch (e: FileNotFoundException) {
+            e.printStackTrace()
+        } catch (e: IOException) {
+            e.printStackTrace()
+        }
     }
 
     private fun initRcV() = with(binding) {
